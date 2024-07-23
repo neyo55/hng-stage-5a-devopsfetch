@@ -79,15 +79,23 @@ display_docker() {
 
     if [ -z "$1" ]; then
         echo "Docker Images (showing latest 15):"
-        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}" | head -n 16 | \
-        awk 'NR==1 {print} NR>1 {printf "%.20s\t%.10s\t%.12s\t%.15s\t%s\n", $1, $2, $3, $4, $5}' | \
-        format_table "REPOSITORY TAG IMAGE_ID CREATED SIZE"
+        (docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}" | head -n 16 | \
+        awk 'NR==1 {print} NR>1 {printf "%-40s\t%-15s\t%-12s\t%-20s\t%s\n", substr($1,1,40), substr($2,1,15), substr($3,1,12), substr($4,1,20), $5}') | \
+        column -t -s $'\t' | sed '2s/[^-]/-/g'
 
         echo
         echo "Docker Containers (showing latest 10):"
-        docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}" | head -n 11 | \
-        awk 'NR==1 {print} NR>1 {printf "%.12s\t%.20s\t%.30s\t%.20s\t%.20s\t%.20s\t%s\n", $1, $2, $3, $4, $5, $6, $7}' | \
-        format_table "CONTAINER_ID IMAGE COMMAND CREATED STATUS PORTS NAMES"
+        (docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}" | head -n 11 | \
+        awk 'NR==1 {print} NR>1 {printf "%-12s\t%-25s\t%-30s\t%-20s\t%-20s\t%-20s\t%s\n", 
+            $1, 
+            substr($2,1,25), 
+            substr($3,1,30), 
+            substr($4,1,20), 
+            substr($5,1,20), 
+            substr($6,1,20), 
+            $7
+        }') | \
+        column -t -s $'\t' | sed '2s/[^-]/-/g'
     else
         echo "Details for container $1:"
         container_info=$(docker inspect "$1" 2>/dev/null)
