@@ -1,0 +1,39 @@
+@channel Devops MID INTERNSHIP TASK. 
+Building devopsfetch for Server Information Retrieval and Monitoring
+
+Objective: Develop a tool for devops named devopsfetch that collects and displays system information, including active ports, user logins, Nginx configurations, Docker images, and container statuses. Implement a systemd service to monitor and log these activities continuously.
+
+Requirements:
+Information Retrieval:
+1. Ports:
+   - Display all active ports and services (-p or --port).
+   - Provide detailed information about a specific port (-p <port_number>).
+2. Docker:
+   - List all Docker images and containers (-d or --docker).
+   - Provide detailed information about a specific container (-d <container_name>).
+3. Nginx:
+   - Display all Nginx domains and their ports (-n or --nginx).
+   - Provide detailed configuration information for a specific domain (-n <domain>).
+4. Users:
+   - List all users and their last login times (-u or --users).
+   - Provide detailed information about a specific user (-u <username>).
+5. Time Range:
+   - Display activities within a specified time range (-t or --time).
+
+Output Formatting:
+- Ensure all outputs are formatted for readability, in well formatted tables with descriptive column names.
+
+Installation Script:
+- Create a script to install necessary dependencies and set up a systemd service to monitor and log activities.
+- Implement continuous monitoring mode with logging to a file, ensuring log rotation and management.
+
+Help and Documentation:
+- Implement a help flag -h or --help to provide usage instructions for the program.
+- Write clear and comprehensive documentation covering:
+  - Installation and configuration steps.
+  - Usage examples for each command-line flag.
+  - The logging mechanism and how to retrieve logs.
+
+Submission Details:
+- Submission Link: https://forms.gle/45yS2UYeVk5XsKP26
+- Deadline: Wednesday, 24th July 2024, by 11:59 PM GMT.
