@@ -37,9 +37,9 @@ display_help() {
     echo "  devopsfetch -d                 # List all Docker images and containers"
     echo "  devopsfetch -d mycontainer     # Show details for 'mycontainer'"
     echo "  devopsfetch -n                 # List all Nginx domains"
-    echo "  devopsfetch -n example.com     # Show Nginx config for example.com"
+    echo "  devopsfetch -n contoso.com     # Show Nginx config for contoso.com"
     echo "  devopsfetch -u                 # List all users and last login times"
-    echo "  devopsfetch -u johndoe         # Show details for user 'johndoe'"
+    echo "  devopsfetch -u destiny         # Show details for user 'destiny'"
     echo "  devopsfetch -t '2023-01-01 00:00:00' '2023-01-31 23:59:59'  # Show activities in January 2023"
 }
 
@@ -111,16 +111,13 @@ display_docker() {
 display_nginx() {
     if [ -z "$1" ]; then
         echo "Nginx Domains and Ports:"
-        domains=$(grep -R server_name /etc/nginx/sites-enabled/ 2>/dev/null | awk '{print $2}' | sed 's/;//')
-        if [ -z "$domains" ]; then
-            echo "No Nginx domains found or Nginx is not installed."
-        else
-            (echo -e "Domain\tPort"; echo "$domains" | \
-            while read domain; do
-                port=$(grep -R "listen " /etc/nginx/sites-enabled/ 2>/dev/null | grep -v "#" | awk '{print $2}' | sed 's/;//' | head -1)
-                echo -e "$domain\t$port"
-            done) | format_table "Domain Port"
-        fi
+        (echo -e "Server Domain\tProxy\tConfiguration File"; 
+        grep -R "server_name" /etc/nginx/sites-enabled/ | awk '{print $3}' | sed 's/;//' | \
+        while read domain; do
+            proxy=$(grep -R "proxy_pass" /etc/nginx/sites-enabled/ | grep "$domain" | awk '{print $2}')
+            config_file=$(grep -Rl "server_name $domain" /etc/nginx/sites-enabled/)
+            echo -e "$domain\t$proxy\t$config_file"
+        done) | format_table "Server Domain Proxy Configuration File"
     else
         echo "Nginx configuration for $1:"
         grep -R -A 20 "server_name $1" /etc/nginx/sites-enabled/ 2>/dev/null || echo "No configuration found for $1"
@@ -200,8 +197,8 @@ case "$1" in
         ;;
     -t|--time)
         if [ -z "$2" ] || [ -z "$3" ]; then
-            echo "Error: The -t option requires two arguments (start time and end time)."
-            echo "Example: devopsfetch -t '2024-07-22 23:00:00' '2024-07-23 00:05:00'"
+            echo "Error: Please provide both start and end timestamps."
+            display_help
             exit 1
         fi
         display_time_range "$2" "$3"
@@ -210,10 +207,12 @@ case "$1" in
         display_help
         ;;
     *)
-        echo "Invalid option. Use -h or --help for usage information."
+        echo "Error: Invalid option or missing argument."
+        display_help
         exit 1
         ;;
 esac
+
 
 
 
