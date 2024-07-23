@@ -47,7 +47,7 @@ display_help() {
 format_table() {
     local header="$1"
     shift
-    (echo "$header"; cat) | column -t -s $'\t' | sed '2s/[^|]/-/g'
+    (echo "$header"; cat) | column -t -s $'\t' | sed '2s/[^-]/-/g'
 }
 
 # Function to display port information
@@ -67,15 +67,35 @@ display_ports() {
 
 # Function to display Docker information
 display_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo "Error: Docker is not installed or not in PATH"
+        return 1
+    fi
+
+    if ! docker info &> /dev/null; then
+        echo "Error: Docker daemon is not running"
+        return 1
+    fi
+
     if [ -z "$1" ]; then
-        echo "Docker Images:"
-        docker images | format_table "REPOSITORY TAG IMAGE_ID CREATED SIZE"
+        echo "Docker Images (showing latest 15):"
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}" | head -n 16 | \
+        awk 'NR==1 {print} NR>1 {printf "%.20s\t%.10s\t%.12s\t%.15s\t%s\n", $1, $2, $3, $4, $5}' | \
+        format_table "REPOSITORY TAG IMAGE_ID CREATED SIZE"
+
         echo
-        echo "Docker Containers:"
-        docker ps -a | format_table "CONTAINER_ID IMAGE COMMAND CREATED STATUS PORTS NAMES"
+        echo "Docker Containers (showing latest 10):"
+        docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}" | head -n 11 | \
+        awk 'NR==1 {print} NR>1 {printf "%.12s\t%.20s\t%.30s\t%.20s\t%.20s\t%.20s\t%s\n", $1, $2, $3, $4, $5, $6, $7}' | \
+        format_table "CONTAINER_ID IMAGE COMMAND CREATED STATUS PORTS NAMES"
     else
         echo "Details for container $1:"
-        docker inspect $1 | jq '.[0] | {Id, Name, State, Image, Mounts}'
+        container_info=$(docker inspect "$1" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            echo "$container_info" | jq '.[0] | {Id, Name, State, Image, Mounts}'
+        else
+            echo "Error: No such container: $1"
+        fi
     fi
 }
 
@@ -83,14 +103,19 @@ display_docker() {
 display_nginx() {
     if [ -z "$1" ]; then
         echo "Nginx Domains and Ports:"
-        (echo -e "Domain\tPort"; grep -R server_name /etc/nginx/sites-enabled/ | awk '{print $2}' | sed 's/;//' | \
-        while read domain; do
-            port=$(grep -R "listen " /etc/nginx/sites-enabled/ | grep -v "#" | awk '{print $2}' | sed 's/;//' | head -1)
-            echo -e "$domain\t$port"
-        done) | format_table "Domain Port"
+        domains=$(grep -R server_name /etc/nginx/sites-enabled/ 2>/dev/null | awk '{print $2}' | sed 's/;//')
+        if [ -z "$domains" ]; then
+            echo "No Nginx domains found or Nginx is not installed."
+        else
+            (echo -e "Domain\tPort"; echo "$domains" | \
+            while read domain; do
+                port=$(grep -R "listen " /etc/nginx/sites-enabled/ 2>/dev/null | grep -v "#" | awk '{print $2}' | sed 's/;//' | head -1)
+                echo -e "$domain\t$port"
+            done) | format_table "Domain Port"
+        fi
     else
         echo "Nginx configuration for $1:"
-        grep -R -A 20 "server_name $1" /etc/nginx/sites-enabled/
+        grep -R -A 20 "server_name $1" /etc/nginx/sites-enabled/ 2>/dev/null || echo "No configuration found for $1"
     fi
 }
 
@@ -98,22 +123,41 @@ display_nginx() {
 display_users() {
     if [ -z "$1" ]; then
         echo "Users and Last Login Times:"
-        (echo -e "Username\tIP\tDate\tTime"; last -w | awk '!seen[$1]++ {print $1, $3, $4, $5, $6}') | \
-        format_table "Username IP Date Time"
+        (echo -e "Username\tIP\tDate\tTime"; 
+         last -w | awk '!seen[$1]++ {
+             username=$1
+             ip=$3
+             date=$4" "$5" "$6
+             time=$7
+             if (NF > 7) time = time" "$8
+             print username "\t" ip "\t" date "\t" time
+         }' | head -n 10
+        ) | format_table "Username IP Date Time"
     else
         echo "Details for user $1:"
-        id $1
+        id $1 2>/dev/null || echo "User $1 not found"
         echo "Last login:"
-        last $1 | head -1
+        last $1 | head -1 || echo "No login history for $1"
     fi
 }
 
 # Function to display activities within a time range
 display_time_range() {
-    echo "Activities between $1 and $2:"
-    (echo -e "Time\tUser\tCommand"; journalctl --since "$1" --until "$2" | \
-    awk '{print $3, $4, $5, $6, $7}' | tail -n 50) | \
-    format_table "Time User Command"
+    # Convert hyphens to colons in the timestamps
+    start_time=$(echo "$1" | tr '-' ':')
+    end_time=$(echo "$2" | tr '-' ':')
+    
+    echo "Activities between $start_time and $end_time:"
+    activities=$(journalctl --since "$start_time" --until "$end_time" 2>/dev/null | tail -n 50)
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to parse timestamp. Please use the format 'YYYY-MM-DD HH:MM:SS'."
+    elif [ -z "$activities" ]; then
+        echo "No activities found in the specified time range."
+    else
+        (echo -e "Time\tUser\tCommand"; echo "$activities" | \
+        awk '{print $3, $4, $5, $6, $7}') | \
+        format_table "Time User Command"
+    fi
 }
 
 # Function for continuous monitoring
@@ -147,6 +191,11 @@ case "$1" in
         display_users "$2"
         ;;
     -t|--time)
+        if [ -z "$2" ] || [ -z "$3" ]; then
+            echo "Error: The -t option requires two arguments (start time and end time)."
+            echo "Example: devopsfetch -t '2024-07-22 23:00:00' '2024-07-23 00:05:00'"
+            exit 1
+        fi
         display_time_range "$2" "$3"
         ;;
     -h|--help)
@@ -157,7 +206,6 @@ case "$1" in
         exit 1
         ;;
 esac
-
 
 
 
