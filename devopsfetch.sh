@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Truncate the log file before each run to avoid over logging
+logfile="/tmp/devopsfetch.log"
+: > "$logfile"
+
 # If running from command line, don't redirect output
 if [ -t 1 ]; then
     exec 1>/dev/tty
